@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: financial-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: financial_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d financial_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - financial_net
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: financial-core-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/financial_db
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      APP_SECURITY_USER: admin
+      APP_SECURITY_PASSWORD: admin123
+    networks:
+      - financial_net
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  financial_net:
+    driver: bridge

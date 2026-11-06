@@ -1,0 +1,27 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# AI Tooling & Local Prompts (Never Commit to Public Repos)
+.agents/
+.agent/
+.claude/
+CLAUDE.md
+AGENTS.md
+implementation_plan.md
+RELATORIO_*.md
+EXPLICACAO_*.txt
+SKILLS-*.md
+
+# Operating System & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Build & Dependencies
+target/
+*.class
+*.log
+
