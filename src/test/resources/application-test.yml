@@ -16,5 +16,5 @@ spring:
 
 security:
   user:
-    name: test-user
-    password: test-password
+    name: admin
+    password: admin123

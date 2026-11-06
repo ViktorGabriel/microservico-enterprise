@@ -2,12 +2,15 @@
 
 [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3](https://img.shields.io/badge/Spring_Boot-3.3.5-6DB33F?style=for-the-badge&logo=spring-boot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![JWT](https://img.shields.io/badge/JWT-Stateless_Auth-000000?style=for-the-badge&logo=json-web-tokens&logoColor=white)](https://jwt.io/)
+[![Swagger](https://img.shields.io/badge/OpenAPI-Swagger_UI-85EA2D?style=for-the-badge&logo=swagger&logoColor=black)](https://swagger.io/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Flyway](https://img.shields.io/badge/Flyway-10-CC0202?style=for-the-badge&logo=flyway&logoColor=white)](https://flywaydb.org/)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://www.docker.com/)
+[![Testcontainers](https://img.shields.io/badge/Testcontainers-PostgreSQL-FFA500?style=for-the-badge&logo=testcontainers&logoColor=white)](https://testcontainers.com/)
 [![JUnit 5](https://img.shields.io/badge/JUnit-5-25A162?style=for-the-badge&logo=junit5&logoColor=white)](https://junit.org/junit5/)
 
-Motor transacional de alta confiabilidade desenvolvido para processamento bancário e de pagamentos em larga escala. A API implementa princípios de **Clean Architecture (Ports and Adapters)**, garantindo isolamento total do domínio, garantias estritas de idempotência via cabeçalho HTTP (`X-Idempotency-Key`) e prevenção de concorrência com **Pessimistic Locking** e ordenação determinística de locks para evitar deadlocks.
+Motor transacional de alta confiabilidade desenvolvido para processamento bancário e de pagamentos em larga escala. A API implementa princípios de **Clean Architecture (Ports and Adapters)**, garantindo isolamento total do domínio, garantias estritas de idempotência via cabeçalho HTTP (`X-Idempotency-Key`), autenticação stateless **Bearer JWT** e prevenção de concorrência com **Pessimistic Locking** e ordenação determinística de locks para evitar deadlocks.
 
 ---
 
@@ -27,14 +30,27 @@ src/main/java/com/enterprise/financial
     ├── adapter/
     │   ├── in/web/              # Adaptador REST (Controllers, Records DTOs, ExceptionHandler)
     │   └── out/persistence/     # Adaptador JPA (Entities, Spring Data Repositories, Mappers)
-    └── config/                  # Segurança (Spring Security Stateless) e Configurações
+    └── config/                  # Segurança JWT (Spring Security Stateless, Filter) e OpenAPI Swagger
 ```
 
 ### 🛡️ Destaques de Engenharia
-1. **Prevenção Estrita de Deadlocks:** Na transferência entre contas, a aquisição de travas pessimistas no banco de dados é feita de maneira **ordenada deterministicamente pelo UUID** das contas envolvidas (`id1.compareTo(id2) < 0`), eliminando deadlocks causados por concorrência mútua reversa.
-2. **Garantia de Idempotência:** Cada operação financeira exige o cabeçalho `X-Idempotency-Key`. Se uma requisição com a mesma chave for reenviada (ex.: retentativas de rede de gateways de pagamento), a operação não é duplicada e o registro original é retornado de forma consistente.
-3. **Precisão Monetária:** Todos os valores são tratados com `BigDecimal` normalizados para 4 casas decimais e arredondamento bancário (`HALF_EVEN`).
-4. **Zero-Leak & Security:** Migrations automatizadas com Flyway, sanitização em `.gitignore` e Spring Security stateless.
+1. **Autenticação Stateless com JWT:** Rotas transacionais protegidas via Bearer JWT token assinado via HMAC-SHA256, com tempo de expiração e extração de authorities.
+2. **Prevenção Estrita de Deadlocks:** Na transferência entre contas, a aquisição de travas pessimistas no banco de dados é feita de maneira **ordenada deterministicamente pelo UUID** das contas envolvidas (`id1.compareTo(id2) < 0`), eliminando deadlocks causados por concorrência mútua reversa.
+3. **Garantia de Idempotência:** Cada operação financeira exige o cabeçalho `X-Idempotency-Key`. Se uma requisição com a mesma chave for reenviada (ex.: retentativas de rede de gateways de pagamento), a operação não é duplicada e o registro original é retornado de forma consistente.
+4. **Documentação Viva com Swagger / OpenAPI:** Documentação interativa personalizada em `/swagger-ui.html` com suporte nativo a Bearer Token e injeção do header `X-Idempotency-Key`.
+5. **Testcontainers com PostgreSQL 16:** Testes de integração em banco real via Docker container e migrações Flyway.
+6. **Precisão Monetária:** Todos os valores são tratados com `BigDecimal` normalizados para 4 casas decimais e arredondamento bancário (`HALF_EVEN`).
+
+---
+
+## 📖 Documentação Interativa (Swagger UI)
+
+Com a aplicação em execução, acesse a interface interativa do Swagger para testar todos os endpoints:
+
+- **Swagger UI:** [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+- **OpenAPI JSON Spec:** [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs)
+
+> Para autenticar no Swagger UI, clique no botão **Authorize** no topo da página e informe o token obtido no endpoint `/api/v1/auth/login`.
 
 ---
 
@@ -60,14 +76,14 @@ A API estará disponível em `http://localhost:8080`.
 
 ### 2. Execução Local via Maven Wrapper
 
-Caso prefira rodar diretamente no host com um banco PostgreSQL local ou containerizado:
+Caso prefira rodar diretamente no host:
 
 ```bash
 # Copie o arquivo de variáveis de ambiente
 cp .env.example .env
 
-# Execute a suíte de testes unitários e de integração
-./mvnw clean test
+# Execute a suíte completa de testes unitários e de integração
+./mvnw clean verify
 
 # Inicie a aplicação
 ./mvnw spring-boot:run
@@ -77,7 +93,27 @@ cp .env.example .env
 
 ## 📡 Endpoints da API
 
-### 1. Criar Conta Bancária
+### 1. Autenticação (Gerar Token JWT)
+- **POST** `/api/v1/auth/login`
+- **Request Body:**
+```json
+{
+  "username": "admin",
+  "password": "admin123"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "tokenType": "Bearer",
+  "expiresIn": 3600
+}
+```
+
+---
+
+### 2. Criar Conta Bancária
 - **POST** `/api/v1/accounts`
 - **Request Body:**
 ```json
@@ -104,7 +140,7 @@ cp .env.example .env
 
 ---
 
-### 2. Consultar Saldo / Dados da Conta
+### 3. Consultar Saldo / Dados da Conta
 - **GET** `/api/v1/accounts/{id}`
 - **Response (200 OK):**
 ```json
@@ -120,9 +156,11 @@ cp .env.example .env
 
 ---
 
-### 3. Realizar Depósito (Crédito)
+### 4. Realizar Depósito (Crédito) 🔒
 - **POST** `/api/v1/transactions/deposit`
-- **Header Obrigatório:** `X-Idempotency-Key: dep-uuid-12345`
+- **Headers Obrigatórios:**
+  - `Authorization: Bearer <seu_token_jwt>`
+  - `X-Idempotency-Key: dep-uuid-12345`
 - **Request Body:**
 ```json
 {
@@ -134,9 +172,11 @@ cp .env.example .env
 
 ---
 
-### 4. Realizar Saque (Débito)
+### 5. Realizar Saque (Débito) 🔒
 - **POST** `/api/v1/transactions/withdraw`
-- **Header Obrigatório:** `X-Idempotency-Key: wd-uuid-67890`
+- **Headers Obrigatórios:**
+  - `Authorization: Bearer <seu_token_jwt>`
+  - `X-Idempotency-Key: wd-uuid-67890`
 - **Request Body:**
 ```json
 {
@@ -148,9 +188,11 @@ cp .env.example .env
 
 ---
 
-### 5. Realizar Transferência entre Contas
+### 6. Realizar Transferência entre Contas 🔒
 - **POST** `/api/v1/transactions/transfer`
-- **Header Obrigatório:** `X-Idempotency-Key: tr-uuid-99999`
+- **Headers Obrigatórios:**
+  - `Authorization: Bearer <seu_token_jwt>`
+  - `X-Idempotency-Key: tr-uuid-99999`
 - **Request Body:**
 ```json
 {
@@ -163,7 +205,7 @@ cp .env.example .env
 
 ---
 
-### 6. Consultar Extrato Consolidado
+### 7. Consultar Extrato Consolidado
 - **GET** `/api/v1/accounts/{id}/statement?startDate=2026-11-01T00:00:00Z&endDate=2026-11-30T23:59:59Z`
 - **Response (200 OK):**
 ```json
@@ -192,22 +234,23 @@ cp .env.example .env
 
 ---
 
-### 7. Monitoramento e Saúde
+### 8. Monitoramento e Saúde
 - **GET** `/actuator/health` -> Retorna `{"status": "UP"}`
 
 ---
 
 ## 🧪 Suíte de Testes Automatizados
 
-O projeto conta com pirâmide de testes completa com **JUnit 5**, **Mockito** e **Spring Boot Test**:
+O projeto conta com pirâmide de testes completa com **JUnit 5**, **Mockito**, **Spring Boot Test** e **Testcontainers**:
 
 ```powershell
-./mvnw test
+./mvnw clean verify
 ```
 
 - **Testes Unitários de Domínio:** Invariantes da entidade `Account` (crédito, débito, saldo insuficiente, bloqueio e escala decimal).
 - **Testes de Serviço:** Validação de comportamento idempotente, regras de negócio e prevenção de deadlock.
-- **Testes de Integração End-to-End:** Ciclo de vida completo das transações e validações de cabeçalhos e respostas HTTP.
+- **Testes de Integração com JWT:** Validação do fluxo de autenticação, rejeição de requisições desprotegidas (401 Unauthorized), geração de tokens e ciclo transacional completo.
+- **Testcontainers (PostgreSQL 16):** Validação de persistência real e migrações Flyway em banco de dados conteinerizado.
 
 ---
 
